@@ -14,7 +14,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # 3) Copy your code
-COPY code_deploy.py .
+COPY api.py .
 
 # 4) Railway exposes $PORT; gunicorn will listen on it
 ENV PORT=8080
