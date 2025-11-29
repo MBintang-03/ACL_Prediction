@@ -42,6 +42,7 @@ tmp*/
 # Text files (generated)
 *.txt
 !requirements.txt
+!runtime.txt
 
 # Environment variables
 .env
