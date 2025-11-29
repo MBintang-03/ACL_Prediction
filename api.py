@@ -1,38 +1,52 @@
 # api.py
 import os
-import tempfile
 import json
+import tempfile
+import traceback
+import shutil
 import subprocess
+from io import BytesIO
+
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
-from io import BytesIO
 
 from Code_deploy import process_video
 
 app = Flask(__name__)
+
+# Allow requests from any origin (Vercel, localhost, etc.)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
+
+# ---------------------------------------------------------------------------
+# Health check
+# ---------------------------------------------------------------------------
 @app.route("/", methods=["GET"])
 def health_check():
-    """Health check endpoint"""
-    return jsonify({
-        "status": "healthy",
-        "service": "Soccer Tracker API",
-        "version": "1.0.0"
-    }), 200
+    """Simple health check endpoint."""
+    return jsonify(
+        {
+            "status": "healthy",
+            "service": "Soccer Tracker API",
+            "version": "1.0.0",
+        }
+    ), 200
 
 
+# ---------------------------------------------------------------------------
+# Main processing endpoint
+# ---------------------------------------------------------------------------
 @app.route("/process-video", methods=["POST"])
 def process_video_route():
     tmpdir = None
+
     try:
-        # 1) Check and read uploaded video
+        # ---------------------- 1) Validate input ---------------------------
         if "video" not in request.files:
             return jsonify({"error": "No video uploaded"}), 400
 
         video_file = request.files["video"]
 
-        # 2) Read bbox JSON from form-data "bboxes"
         raw_bboxes = request.form.get("bboxes")
         if not raw_bboxes:
             return jsonify({"error": "Missing 'bboxes' in form-data"}), 400
@@ -42,79 +56,101 @@ def process_video_route():
             main_bbox = data["main_bbox"]
             other_bboxes = data.get("other_bboxes", [])
         except Exception as e:
-            return jsonify({"error": "Invalid bboxes JSON", "details": str(e)}), 400
+            return jsonify(
+                {
+                    "error": "Invalid 'bboxes' JSON",
+                    "details": str(e),
+                }
+            ), 400
 
-        if not main_bbox or len(main_bbox) != 4:
-            return jsonify({"error": "main_bbox must be [x,y,w,h]"}), 400
+        if not isinstance(main_bbox, list) or len(main_bbox) != 4:
+            return jsonify({"error": "main_bbox must be a list [x, y, w, h]"}), 400
 
-        # 3) Save input and prepare output paths
+        # ---------------------- 2) Temp paths -------------------------------
         tmpdir = tempfile.mkdtemp(prefix="soccer_api_")
         input_path = os.path.join(tmpdir, "input.mp4")
         txt_output_path = os.path.join(tmpdir, "labels.txt")
 
         video_file.save(input_path)
 
-        # 4) Call your processing function (returns AVI)
-        output_avi_path, _ = process_video(
+        # ---------------------- 3) Run processing ---------------------------
+        # process_video should return a path to the processed video
+        output_video_path, _ = process_video(
             input_path,
             txt_output_path,
             tuple(main_bbox),
             [tuple(b) for b in other_bboxes],
         )
 
-        # 5) Verify AVI exists
-        if not os.path.exists(output_avi_path):
+        if not os.path.exists(output_video_path):
             return jsonify({"error": "Processed video not found"}), 500
 
-        size = os.path.getsize(output_avi_path)
-        print(f"[DEBUG] AVI output: {output_avi_path}, size: {size} bytes")
+        size = os.path.getsize(output_video_path)
+        print(f"[DEBUG] Raw output video: {output_video_path}, size: {size} bytes")
 
         if size == 0:
             return jsonify({"error": "Processed video is empty"}), 500
 
-        # 6) Convert AVI to MP4 using ffmpeg for browser compatibility
-        output_mp4_path = os.path.join(tmpdir, "output.mp4")
-        
-        try:
-            # Use ffmpeg to convert AVI to MP4 (H.264)
-            subprocess.run([
-                'ffmpeg', '-y',  # -y to overwrite
-                '-i', output_avi_path,
-                '-c:v', 'libx264',  # H.264 codec
-                '-preset', 'fast',
-                '-crf', '23',
-                '-pix_fmt', 'yuv420p',  # Compatibility
-                output_mp4_path
-            ], check=True, capture_output=True)
-            
-            print(f"[DEBUG] MP4 output: {output_mp4_path}")
-            
-        except subprocess.CalledProcessError as e:
-            print(f"[ERROR] FFmpeg conversion failed: {e.stderr.decode()}")
-            # Fallback: try to serve AVI directly
-            output_mp4_path = output_avi_path
+        # ---------------------- 4) Ensure MP4 for browser -------------------
+        final_path = output_video_path
 
-        # 7) Read video into memory
-        with open(output_mp4_path, 'rb') as f:
+        # If not MP4, try to convert with ffmpeg
+        if not output_video_path.lower().endswith(".mp4"):
+            mp4_path = os.path.join(tmpdir, "output.mp4")
+            try:
+                cmd = [
+                    "ffmpeg",
+                    "-y",
+                    "-i",
+                    output_video_path,
+                    "-c:v",
+                    "libx264",
+                    "-preset",
+                    "fast",
+                    "-crf",
+                    "23",
+                    "-pix_fmt",
+                    "yuv420p",
+                    mp4_path,
+                ]
+                result = subprocess.run(
+                    cmd,
+                    check=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                )
+                print(f"[DEBUG] ffmpeg stdout: {result.stdout.decode(errors='ignore')}")
+                print(f"[DEBUG] ffmpeg stderr: {result.stderr.decode(errors='ignore')}")
+
+                final_path = mp4_path
+                print(f"[DEBUG] MP4 output: {final_path}")
+            except subprocess.CalledProcessError as e:
+                # If conversion fails, we just serve the original file
+                print("[ERROR] FFmpeg conversion failed")
+                print(e.stderr.decode(errors="ignore"))
+                final_path = output_video_path
+
+        # ---------------------- 5) Read file into memory --------------------
+        with open(final_path, "rb") as f:
             video_data = f.read()
-        
-        print(f"[DEBUG] Sending {len(video_data)} bytes")
 
-        # 8) Clean up temp files
+        print(f"[DEBUG] Sending {len(video_data)} bytes to client")
+
+        # ---------------------- 6) Cleanup temp files -----------------------
         try:
             if os.path.exists(input_path):
                 os.remove(input_path)
-            if os.path.exists(output_avi_path):
-                os.remove(output_avi_path)
-            if os.path.exists(output_mp4_path) and output_mp4_path != output_avi_path:
-                os.remove(output_mp4_path)
+            if os.path.exists(output_video_path):
+                os.remove(output_video_path)
+            if final_path != output_video_path and os.path.exists(final_path):
+                os.remove(final_path)
             if os.path.exists(txt_output_path):
                 os.remove(txt_output_path)
-            os.rmdir(tmpdir)
-        except Exception as e:
-            print(f"[WARN] Cleanup error: {e}")
+            shutil.rmtree(tmpdir, ignore_errors=True)
+        except Exception as cleanup_err:
+            print(f"[WARN] Cleanup error: {cleanup_err}")
 
-        # 9) Return video from memory with MP4 MIME type
+        # ---------------------- 7) Return response --------------------------
         return send_file(
             BytesIO(video_data),
             mimetype="video/mp4",
@@ -123,19 +159,21 @@ def process_video_route():
         )
 
     except Exception as e:
-        import traceback
+        # Log full traceback on server
         traceback.print_exc()
-        
-        # Clean up on error
+
+        # Best-effort cleanup
         if tmpdir and os.path.exists(tmpdir):
-            try:
-                import shutil
-                shutil.rmtree(tmpdir)
-            except:
-                pass
-        
-        return jsonify({"error": "Internal server error", "details": str(e)}), 500
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+        return jsonify(
+            {
+                "error": "Internal server error",
+                "details": str(e),
+            }
+        ), 500
 
 
 if __name__ == "__main__":
+    # For local testing only
     app.run(host="0.0.0.0", port=8000, debug=True)
