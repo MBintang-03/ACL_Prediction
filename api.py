@@ -1,5 +1,6 @@
 # api.py
 import os
+os.environ["QT_QPA_PLATFORM"] = "offscreen"
 import json
 import tempfile
 import traceback
