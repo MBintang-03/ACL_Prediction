@@ -17,4 +17,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # 4) Railway exposes $PORT; gunicorn will listen on it
-CMD gunicorn -w 2 -b 0.0.0.0:$PORT api:app
+CMD ["/bin/sh", "-c", "gunicorn -w 2 -b 0.0.0.0:${PORT} api:app"]
