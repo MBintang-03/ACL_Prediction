@@ -1,4 +1,3 @@
-const API_URL = "https://acl-prediction.onrender.com/process-video";
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -9,8 +8,9 @@ const API_URL = "https://acl-prediction.onrender.com/process-video";
       font-family: Arial, sans-serif;
       margin: 20px;
     }
+
     .front-page {
-      background:  #ffffff;
+      background: #ffffff;
       min-height: 50vh;
       height: auto;
       min-width: 50vw;
@@ -29,13 +29,13 @@ const API_URL = "https://acl-prediction.onrender.com/process-video";
       justify-content: center;
     }
 
-    Input {
+    input {
       margin-top: 10px;
       justify-content: center;
     }
 
     .video-wrapper {
-      position: relative;      /* canvas will be absolute inside this */
+      position: relative;  /* canvas will be absolute inside this */
       display: inline-block;
       flex-direction: column;
       align-items: center;
@@ -48,15 +48,18 @@ const API_URL = "https://acl-prediction.onrender.com/process-video";
       width: 100%;
       height: auto;
     }
+
     #drawCanvas {
-      position: absolute;           /* 🔹 ADD */
+      position: absolute;
       top: 0;
       left: 0;
-      width: 100%;                  /* 🔹 ADD */
-      height: 100%;                 /* 🔹 ADD */
+      width: 100%;
+      height: 100%;
       pointer-events: auto;
     }
-    .drawCanvas.drawing {
+
+    /* this matches `canvas.classList.add("drawing")` in JS */
+    #drawCanvas.drawing {
       cursor: crosshair;
     }
 
@@ -66,44 +69,48 @@ const API_URL = "https://acl-prediction.onrender.com/process-video";
       width: 100%;
       height: auto;
     }
-
   </style>
 </head>
 <body>
 
-  <!-- Preview -->
   <div class="front-page">
     <h1>Soccer Player Tracking</h1>
-      <div class="btn">
-        <input type="file" id="videoInput" accept="video/*" />
-          <button id="sendBtn" disabled>Process Video</button>
-            <p>
-              Instructions: first rectangle = <b>Main Player</b>, next rectangles = <b>Other Players</b>.
-            </p>
-      </div>
+
+    <div class="btn">
+      <input type="file" id="videoInput" accept="video/*" />
+      <button id="sendBtn" disabled>Process Video</button>
+      <p>
+        Instructions: first rectangle = <b>Main Player</b>, next rectangles = <b>Other Players</b>.
+      </p>
+    </div>
+
     <div class="video-wrapper">
-        <video id="videoPreview" controls></video>
+      <video id="videoPreview" controls></video>
       <canvas id="drawCanvas"></canvas>
     </div>
 
-      <h2>Processed Output</h2>
+    <h2>Processed Output</h2>
     <video id="outputVideo" controls></video>
   </div>
 
   <script>
-    const videoInput = document.getElementById("videoInput");
-    const videoPreview = document.getElementById("videoPreview");
-    const canvas = document.getElementById("drawCanvas");
-    const ctx = canvas.getContext("2d");
-    const sendBtn = document.getElementById("sendBtn");
-    const outputVideo = document.getElementById("outputVideo");
+    // 🔹 API endpoint (switch between remote & local here)
+    const API_URL = "https://acl-prediction.onrender.com/process-video";
+    // const API_URL = "http://127.0.0.1:8000/process-video"; // for local testing
 
-    let mainBBox = null;          // [x, y, w, h]
-    let otherBBoxes = [];         // [[x,y,w,h], ...]
-    let drawing = false;
+    const videoInput   = document.getElementById("videoInput");
+    const videoPreview = document.getElementById("videoPreview");
+    const canvas       = document.getElementById("drawCanvas");
+    const ctx          = canvas.getContext("2d");
+    const sendBtn      = document.getElementById("sendBtn");
+    const outputVideo  = document.getElementById("outputVideo");
+
+    let mainBBox      = null; // [x, y, w, h]
+    let otherBBoxes   = [];   // [[x,y,w,h], ...]
+    let drawing       = false;
     let startX = 0, startY = 0;
-    let currentRect = null;
-    let currentFile = null;
+    let currentRect   = null;
+    let currentFile   = null;
 
     // 1) When user selects a video
     videoInput.addEventListener("change", () => {
@@ -141,12 +148,12 @@ const API_URL = "https://acl-prediction.onrender.com/process-video";
 
     // Helper: translate mouse coords to canvas coords
     function getCanvasCoords(ev) {
-      const rect = canvas.getBoundingClientRect();
+      const rect   = canvas.getBoundingClientRect();
       const scaleX = canvas.width / rect.width;
       const scaleY = canvas.height / rect.height;
       return {
         x: (ev.clientX - rect.left) * scaleX,
-        y: (ev.clientY - rect.top) * scaleY
+        y: (ev.clientY - rect.top)  * scaleY
       };
     }
 
@@ -164,8 +171,8 @@ const API_URL = "https://acl-prediction.onrender.com/process-video";
     canvas.addEventListener("mousemove", (ev) => {
       if (!drawing) return;
       const pos = getCanvasCoords(ev);
-      const w = pos.x - startX;
-      const h = pos.y - startY;
+      const w   = pos.x - startX;
+      const h   = pos.y - startY;
       currentRect = [startX, startY, w, h];
 
       // redraw
@@ -225,66 +232,63 @@ const API_URL = "https://acl-prediction.onrender.com/process-video";
       if (mainBBox) sendBtn.disabled = false;
     });
 
-    // 4) Send to Flask API
+    // 4) Send to API
     sendBtn.addEventListener("click", async () => {
-  if (!currentFile || !mainBBox) {
-    alert("Select video and draw at least one box (main player).");
-    return;
-  }
-
-  const formData = new FormData();
-  formData.append("video", currentFile);
-  formData.append(
-    "bboxes",
-    JSON.stringify({
-      main_bbox: mainBBox,
-      other_bboxes: otherBBoxes,
-    })
-  );
-
-  sendBtn.disabled = true;
-  sendBtn.textContent = "Processing...";
-
-  try {
-    const res = await fetch("http://127.0.0.1:8000/process-video", {
-      method: "POST",
-      body: formData,
-    });
-
-    console.log("Status:", res.status);
-    console.log("Content-Type:", res.headers.get("Content-Type"));
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      console.error("Server error body:", err);
-      alert("Server error: " + (err.error || res.statusText));
-    } else {
-      const blob = await res.blob();
-      console.log("Blob size:", blob.size);
-
-      if (blob.size === 0) {
-        alert("Received empty video from server.");
+      if (!currentFile || !mainBBox) {
+        alert("Select video and draw at least one box (main player).");
         return;
       }
 
-      const url = URL.createObjectURL(blob);
-      outputVideo.src = url;
-      outputVideo.load();
-      outputVideo.play().catch((e) => {
-        console.error("Play error:", e);
-      });
-    }
-  } catch (e) {
-    console.error(e);
-    alert("Request failed: " + e.message);
-  } finally {
-    sendBtn.disabled = false;
-    sendBtn.textContent = "Process Video";
-  }
-});
+      const formData = new FormData();
+      formData.append("video", currentFile);
+      formData.append(
+        "bboxes",
+        JSON.stringify({
+          main_bbox: mainBBox,
+          other_bboxes: otherBBoxes,
+        })
+      );
 
+      sendBtn.disabled = true;
+      sendBtn.textContent = "Processing...";
+
+      try {
+        const res = await fetch(API_URL, {
+          method: "POST",
+          body: formData,
+        });
+
+        console.log("Status:", res.status);
+        console.log("Content-Type:", res.headers.get("Content-Type"));
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          console.error("Server error body:", err);
+          alert("Server error: " + (err.error || res.statusText));
+        } else {
+          const blob = await res.blob();
+          console.log("Blob size:", blob.size);
+
+          if (blob.size === 0) {
+            alert("Received empty video from server.");
+            return;
+          }
+
+          const url = URL.createObjectURL(blob);
+          outputVideo.src = url;
+          outputVideo.load();
+          outputVideo.play().catch((e) => {
+            console.error("Play error:", e);
+          });
+        }
+      } catch (e) {
+        console.error(e);
+        alert("Request failed: " + e.message);
+      } finally {
+        sendBtn.disabled = false;
+        sendBtn.textContent = "Process Video";
+      }
+    });
   </script>
 </body>
 </html>
-
-
