@@ -8,7 +8,6 @@
       font-family: Arial, sans-serif;
       margin: 20px;
     }
-
     .front-page {
       background: #ffffff;
       min-height: 50vh;
@@ -35,7 +34,7 @@
     }
 
     .video-wrapper {
-      position: relative;  /* canvas will be absolute inside this */
+      position: relative;      /* canvas will be absolute inside this */
       display: inline-block;
       flex-direction: column;
       align-items: center;
@@ -58,24 +57,24 @@
       pointer-events: auto;
     }
 
-    /* this matches `canvas.classList.add("drawing")` in JS */
-    #drawCanvas.drawing {
+    .drawCanvas.drawing {
       cursor: crosshair;
     }
 
-    .OutputVideo {
+    #outputVideo {
       display: block;
       max-width: 480px;
       width: 100%;
       height: auto;
+      margin-top: 20px;
     }
   </style>
 </head>
 <body>
 
+  <!-- Preview -->
   <div class="front-page">
     <h1>Soccer Player Tracking</h1>
-
     <div class="btn">
       <input type="file" id="videoInput" accept="video/*" />
       <button id="sendBtn" disabled>Process Video</button>
@@ -94,23 +93,24 @@
   </div>
 
   <script>
-    // 🔹 API endpoint (switch between remote & local here)
-    const API_URL = "https://acl-prediction.onrender.com/process-video";
-    // const API_URL = "http://127.0.0.1:8000/process-video"; // for local testing
+    // 🔹 API endpoint (change this when you deploy)
+    const API_URL = "https://acl-prediction.onrender.com/";
+    // For Render deployment:
+    // const API_URL = "https://acl-prediction.onrender.com/process-video";
 
-    const videoInput   = document.getElementById("videoInput");
+    const videoInput = document.getElementById("videoInput");
     const videoPreview = document.getElementById("videoPreview");
-    const canvas       = document.getElementById("drawCanvas");
-    const ctx          = canvas.getContext("2d");
-    const sendBtn      = document.getElementById("sendBtn");
-    const outputVideo  = document.getElementById("outputVideo");
+    const canvas = document.getElementById("drawCanvas");
+    const ctx = canvas.getContext("2d");
+    const sendBtn = document.getElementById("sendBtn");
+    const outputVideo = document.getElementById("outputVideo");
 
-    let mainBBox      = null; // [x, y, w, h]
-    let otherBBoxes   = [];   // [[x,y,w,h], ...]
-    let drawing       = false;
+    let mainBBox = null;          // [x, y, w, h]
+    let otherBBoxes = [];         // [[x,y,w,h], ...]
+    let drawing = false;
     let startX = 0, startY = 0;
-    let currentRect   = null;
-    let currentFile   = null;
+    let currentRect = null;
+    let currentFile = null;
 
     // 1) When user selects a video
     videoInput.addEventListener("change", () => {
@@ -148,12 +148,12 @@
 
     // Helper: translate mouse coords to canvas coords
     function getCanvasCoords(ev) {
-      const rect   = canvas.getBoundingClientRect();
+      const rect = canvas.getBoundingClientRect();
       const scaleX = canvas.width / rect.width;
       const scaleY = canvas.height / rect.height;
       return {
         x: (ev.clientX - rect.left) * scaleX,
-        y: (ev.clientY - rect.top)  * scaleY
+        y: (ev.clientY - rect.top) * scaleY
       };
     }
 
@@ -171,8 +171,8 @@
     canvas.addEventListener("mousemove", (ev) => {
       if (!drawing) return;
       const pos = getCanvasCoords(ev);
-      const w   = pos.x - startX;
-      const h   = pos.y - startY;
+      const w = pos.x - startX;
+      const h = pos.y - startY;
       currentRect = [startX, startY, w, h];
 
       // redraw
@@ -232,7 +232,7 @@
       if (mainBBox) sendBtn.disabled = false;
     });
 
-    // 4) Send to API
+    // 4) Send to backend API
     sendBtn.addEventListener("click", async () => {
       if (!currentFile || !mainBBox) {
         alert("Select video and draw at least one box (main player).");
