@@ -1,4 +1,3 @@
-# Dockerfile
 FROM python:3.12-slim
 
 # 1) System libs needed by OpenCV
@@ -19,5 +18,4 @@ COPY code_deploy.py .
 
 # 4) Railway exposes $PORT; gunicorn will listen on it
 ENV PORT=8080
-
 CMD ["gunicorn", "-w", "2", "-b", "0.0.0.0:8080", "api:app"]
