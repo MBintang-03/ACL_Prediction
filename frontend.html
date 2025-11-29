@@ -2,50 +2,112 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Soccer Tracker Demo</title>
+  <title>Soccer Player Tracking</title>
   <style>
     body {
       font-family: Arial, sans-serif;
       margin: 20px;
+      background: #f5f5f5;
     }
     .front-page {
       background: #ffffff;
       min-height: 50vh;
-      height: auto;
-      min-width: 50vw;
-      width: auto;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
     }
 
-    .btn {
-      position: relative;
-      font-size: 1rem;
-      font-weight: 600;
+    h1 {
+      color: #333;
+      margin-bottom: 20px;
+    }
+
+    .controls {
+      display: flex;
+      flex-direction: column;
       align-items: center;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .button-group {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
       justify-content: center;
     }
 
-    input {
-      margin-top: 10px;
-      justify-content: center;
+    button {
+      padding: 10px 20px;
+      font-size: 14px;
+      font-weight: 600;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background-color 0.3s;
+    }
+
+    #sendBtn {
+      background-color: #4CAF50;
+      color: white;
+    }
+
+    #sendBtn:hover:not(:disabled) {
+      background-color: #45a049;
+    }
+
+    #sendBtn:disabled {
+      background-color: #cccccc;
+      cursor: not-allowed;
+    }
+
+    #resetBtn {
+      background-color: #f44336;
+      color: white;
+    }
+
+    #resetBtn:hover {
+      background-color: #da190b;
+    }
+
+    input[type="file"] {
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      background: white;
+    }
+
+    .instructions {
+      background: #e3f2fd;
+      padding: 15px;
+      border-radius: 4px;
+      margin: 10px 0;
+      text-align: center;
+      max-width: 500px;
+    }
+
+    .instructions b {
+      color: #1976d2;
     }
 
     .video-wrapper {
-      position: relative;      /* canvas will be absolute inside this */
+      position: relative;
       display: inline-block;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
+      margin: 20px 0;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      border-radius: 4px;
+      overflow: hidden;
     }
 
     #videoPreview {
       display: block;
-      max-width: 480px;
+      max-width: 640px;
       width: 100%;
       height: auto;
+      background: #000;
     }
 
     #drawCanvas {
@@ -55,32 +117,71 @@
       width: 100%;
       height: 100%;
       pointer-events: auto;
+      touch-action: none;
     }
 
-    .drawCanvas.drawing {
+    #drawCanvas.drawing {
       cursor: crosshair;
+    }
+
+    .output-section {
+      width: 100%;
+      max-width: 640px;
+      margin-top: 30px;
+    }
+
+    .output-section h2 {
+      color: #333;
+      margin-bottom: 15px;
     }
 
     #outputVideo {
       display: block;
-      max-width: 480px;
       width: 100%;
       height: auto;
-      margin-top: 20px;
+      background: #000;
+      border-radius: 4px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+
+    .status {
+      margin-top: 10px;
+      padding: 10px;
+      border-radius: 4px;
+      text-align: center;
+      font-weight: 500;
+    }
+
+    .status.info {
+      background: #e3f2fd;
+      color: #1976d2;
+    }
+
+    .status.success {
+      background: #e8f5e9;
+      color: #2e7d32;
     }
   </style>
 </head>
 <body>
 
-  <!-- Preview -->
   <div class="front-page">
-    <h1>Soccer Player Tracking</h1>
-    <div class="btn">
+    <h1>⚽ Soccer Player Tracking</h1>
+    
+    <div class="controls">
       <input type="file" id="videoInput" accept="video/*" />
-      <button id="sendBtn" disabled>Process Video</button>
-      <p>
-        Instructions: first rectangle = <b>Main Player</b>, next rectangles = <b>Other Players</b>.
-      </p>
+      
+      <div class="button-group">
+        <button id="resetBtn">Reset Boxes</button>
+        <button id="sendBtn" disabled>Process Video</button>
+      </div>
+
+      <div class="instructions">
+        <p>
+          📍 <b>First rectangle</b> = Main Player (red)<br>
+          📍 <b>Next rectangles</b> = Other Players (green)
+        </p>
+      </div>
     </div>
 
     <div class="video-wrapper">
@@ -88,8 +189,10 @@
       <canvas id="drawCanvas"></canvas>
     </div>
 
-    <h2>Processed Output</h2>
-    <video id="outputVideo" controls></video>
+    <div class="output-section">
+      <h2>Processed Output</h2>
+      <video id="outputVideo" controls></video>
+    </div>
   </div>
 
   <script>
@@ -100,16 +203,20 @@
     const canvas = document.getElementById("drawCanvas");
     const ctx = canvas.getContext("2d");
     const sendBtn = document.getElementById("sendBtn");
+    const resetBtn = document.getElementById("resetBtn");
     const outputVideo = document.getElementById("outputVideo");
 
-    let mainBBox = null;          // [x, y, w, h]
-    let otherBBoxes = [];         // [[x,y,w,h], ...]
+    let mainBBox = null;
+    let otherBBoxes = [];
     let drawing = false;
     let startX = 0, startY = 0;
     let currentRect = null;
     let currentFile = null;
 
-    // 1) When user selects a video
+    // Initialize canvas context
+    ctx.lineWidth = 3;
+
+    // Load video file
     videoInput.addEventListener("change", () => {
       const file = videoInput.files[0];
       if (!file) return;
@@ -118,96 +225,117 @@
       const url = URL.createObjectURL(file);
       videoPreview.src = url;
 
-      // reset bboxes
-      mainBBox = null;
-      otherBBoxes = [];
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      sendBtn.disabled = true;
+      resetBoxes();
     });
 
-    // 2) When video metadata is loaded, size canvas to match video
+    // Size canvas to match video
     videoPreview.addEventListener("loadedmetadata", () => {
       const vw = videoPreview.videoWidth;
       const vh = videoPreview.videoHeight;
 
       if (!vw || !vh) return;
 
-      // Set canvas to same resolution as video
       canvas.width = vw;
       canvas.height = vh;
-
-      // Match CSS size
+      
       videoPreview.width = vw;
       videoPreview.height = vh;
       canvas.style.width = videoPreview.clientWidth + "px";
       canvas.style.height = videoPreview.clientHeight + "px";
     });
 
-    // Helper: translate mouse coords to canvas coords
+    // Reset all bounding boxes
+    function resetBoxes() {
+      mainBBox = null;
+      otherBBoxes = [];
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      sendBtn.disabled = true;
+    }
+
+    resetBtn.addEventListener("click", resetBoxes);
+
+    // Get canvas coordinates from mouse or touch event
     function getCanvasCoords(ev) {
       const rect = canvas.getBoundingClientRect();
       const scaleX = canvas.width / rect.width;
       const scaleY = canvas.height / rect.height;
+      
+      const clientX = ev.touches ? ev.touches[0].clientX : ev.clientX;
+      const clientY = ev.touches ? ev.touches[0].clientY : ev.clientY;
+      
       return {
-        x: (ev.clientX - rect.left) * scaleX,
-        y: (ev.clientY - rect.top) * scaleY
+        x: (clientX - rect.left) * scaleX,
+        y: (clientY - rect.top) * scaleY
       };
     }
 
-    // 3) Drawing logic
-    canvas.addEventListener("mousedown", (ev) => {
+    // Redraw all boxes
+    function redrawBoxes(includeCurrentRect = false) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      if (mainBBox) {
+        ctx.strokeStyle = "red";
+        ctx.lineWidth = 3;
+        ctx.strokeRect(mainBBox[0], mainBBox[1], mainBBox[2], mainBBox[3]);
+      }
+
+      ctx.strokeStyle = "lime";
+      ctx.lineWidth = 3;
+      otherBBoxes.forEach(b => {
+        ctx.strokeRect(b[0], b[1], b[2], b[3]);
+      });
+
+      if (includeCurrentRect && currentRect) {
+        ctx.strokeStyle = mainBBox ? "lime" : "red";
+        ctx.lineWidth = 3;
+        ctx.strokeRect(currentRect[0], currentRect[1], currentRect[2], currentRect[3]);
+      }
+    }
+
+    // Start drawing
+    function handleStart(ev) {
       if (!currentFile) return;
+      ev.preventDefault();
+      
       drawing = true;
       canvas.classList.add("drawing");
+      
       const pos = getCanvasCoords(ev);
       startX = pos.x;
       startY = pos.y;
       currentRect = null;
-    });
+    }
 
-    canvas.addEventListener("mousemove", (ev) => {
+    // Continue drawing
+    function handleMove(ev) {
       if (!drawing) return;
+      ev.preventDefault();
+      
       const pos = getCanvasCoords(ev);
       const w = pos.x - startX;
       const h = pos.y - startY;
       currentRect = [startX, startY, w, h];
 
-      // redraw
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      redrawBoxes(true);
+    }
 
-      // draw existing boxes
-      if (mainBBox) {
-        ctx.strokeStyle = "red";
-        ctx.lineWidth = 2;
-        ctx.strokeRect(mainBBox[0], mainBBox[1], mainBBox[2], mainBBox[3]);
-      }
-      ctx.strokeStyle = "lime";
-      otherBBoxes.forEach(b => {
-        ctx.strokeRect(b[0], b[1], b[2], b[3]);
-      });
-
-      // draw current
-      if (currentRect) {
-        ctx.strokeStyle = mainBBox ? "lime" : "red"; // first is main
-        ctx.strokeRect(currentRect[0], currentRect[1], currentRect[2], currentRect[3]);
-      }
-    });
-
-    canvas.addEventListener("mouseup", () => {
+    // Finish drawing
+    function handleEnd() {
       if (!drawing || !currentRect) {
         drawing = false;
         canvas.classList.remove("drawing");
         return;
       }
+      
       drawing = false;
       canvas.classList.remove("drawing");
 
-      // normalize to x,y,w,h positive width/height
+      // Normalize to positive width/height
       let [x, y, w, h] = currentRect;
       if (w < 0) { x += w; w = -w; }
       if (h < 0) { y += h; h = -h; }
 
-      // minimal size
+      // Minimum size check
       if (w < 5 || h < 5) return;
 
       if (!mainBBox) {
@@ -216,61 +344,25 @@
         otherBBoxes.push([Math.round(x), Math.round(y), Math.round(w), Math.round(h)]);
       }
 
-      // redraw final
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      if (mainBBox) {
-        ctx.strokeStyle = "red";
-        ctx.lineWidth = 2;
-        ctx.strokeRect(mainBBox[0], mainBBox[1], mainBBox[2], mainBBox[3]);
-      }
-      ctx.strokeStyle = "lime";
-      otherBBoxes.forEach(b => ctx.strokeRect(b[0], b[1], b[2], b[3]));
+      redrawBoxes(false);
 
       if (mainBBox) sendBtn.disabled = false;
-    });
+    }
 
-  canvas.addEventListener("touchend", (ev) => {
-  if (!drawing || !currentRect) {
-    drawing = false;
-    canvas.classList.remove("drawing");
-    return;
-  }
-  ev.preventDefault();
-  
-  drawing = false;
-  canvas.classList.remove("drawing");
+    // Register event listeners for both mouse and touch
+    canvas.addEventListener("mousedown", handleStart);
+    canvas.addEventListener("mousemove", handleMove);
+    canvas.addEventListener("mouseup", handleEnd);
+    
+    canvas.addEventListener("touchstart", handleStart);
+    canvas.addEventListener("touchmove", handleMove);
+    canvas.addEventListener("touchend", handleEnd);
+    canvas.addEventListener("touchcancel", handleEnd);
 
-  // Normalize (same logic as mouse)
-  let [x, y, w, h] = currentRect;
-  if (w < 0) { x += w; w = -w; }
-  if (h < 0) { y += h; h = -h; }
-
-  if (w < 5 || h < 5) return;
-
-  if (!mainBBox) {
-    mainBBox = [Math.round(x), Math.round(y), Math.round(w), Math.round(h)];
-  } else {
-    otherBBoxes.push([Math.round(x), Math.round(y), Math.round(w), Math.round(h)]);
-  }
-
-  // Redraw final
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  if (mainBBox) {
-    ctx.strokeStyle = "red";
-    ctx.lineWidth = 2;
-    ctx.strokeRect(mainBBox[0], mainBBox[1], mainBBox[2], mainBBox[3]);
-  }
-  ctx.strokeStyle = "lime";
-  otherBBoxes.forEach(b => ctx.strokeRect(b[0], b[1], b[2], b[3]));
-
-  if (mainBBox) sendBtn.disabled = false;
-});
-
-
-    // 4) Send to backend API
+    // Send video to backend for processing
     sendBtn.addEventListener("click", async () => {
       if (!currentFile || !mainBBox) {
-        alert("Select video and draw at least one box (main player).");
+        alert("Please select a video and draw at least one box (main player).");
         return;
       }
 
@@ -297,7 +389,6 @@
         console.log("Content-Type:", res.headers.get("Content-Type"));
 
         if (!res.ok) {
-        // Read raw response text (may or may not be JSON)
           const text = await res.text();
           console.error("Raw error response:", text);
 
@@ -309,23 +400,25 @@
           }
 
           alert("Server error: " + (err.details || err.error || res.statusText));
-          return; // ⬅️ important: stop here if error
-          } else {
-          const blob = await res.blob();
-          console.log("Blob size:", blob.size);
-
-          if (blob.size === 0) {
-            alert("Received empty video from server.");
-            return;
-          }
-
-          const url = URL.createObjectURL(blob);
-          outputVideo.src = url;
-          outputVideo.load();
-          outputVideo.play().catch((e) => {
-            console.error("Play error:", e);
-          });
+          return;
         }
+
+        const blob = await res.blob();
+        console.log("Blob size:", blob.size);
+
+        if (blob.size === 0) {
+          alert("Received empty video from server.");
+          return;
+        }
+
+        const url = URL.createObjectURL(blob);
+        outputVideo.src = url;
+        outputVideo.load();
+        outputVideo.play().catch((e) => {
+          console.error("Play error:", e);
+        });
+
+        alert("✓ Video processed successfully!");
       } catch (e) {
         console.error(e);
         alert("Request failed: " + e.message);
@@ -337,6 +430,7 @@
   </script>
 </body>
 </html>
+
 
 
 
