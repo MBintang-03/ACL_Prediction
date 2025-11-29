@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Soccer Tracker Demo</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+    .front-page {
+      background:  #ffffff;
+      min-height: 50vh;
+      height: auto;
+      min-width: 50vw;
+      width: auto;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .btn {
+      position: relative;
+      font-size: 1rem;
+      font-weight: 600;
+      align-items: center;
+      justify-content: center;
+    }
+
+    Input {
+      margin-top: 10px;
+      justify-content: center;
+    }
+
+    .video-wrapper {
+      position: relative;      /* canvas will be absolute inside this */
+      display: inline-block;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #videoPreview {
+      display: block;
+      max-width: 480px;
+      width: 100%;
+      height: auto;
+    }
+    #drawCanvas {
+      position: absolute;           /* 🔹 ADD */
+      top: 0;
+      left: 0;
+      width: 100%;                  /* 🔹 ADD */
+      height: 100%;                 /* 🔹 ADD */
+      pointer-events: auto;
+    }
+    .drawCanvas.drawing {
+      cursor: crosshair;
+    }
+
+    .OutputVideo {
+      display: block;
+      max-width: 480px;
+      width: 100%;
+      height: auto;
+    }
+
+  </style>
+</head>
+<body>
+
+  <!-- Preview -->
+  <div class="front-page">
+    <h1>Soccer Player Tracking</h1>
+      <div class="btn">
+        <input type="file" id="videoInput" accept="video/*" />
+          <button id="sendBtn" disabled>Process Video</button>
+            <p>
+              Instructions: first rectangle = <b>Main Player</b>, next rectangles = <b>Other Players</b>.
+            </p>
+      </div>
+    <div class="video-wrapper">
+        <video id="videoPreview" controls></video>
+      <canvas id="drawCanvas"></canvas>
+    </div>
+
+      <h2>Processed Output</h2>
+    <video id="outputVideo" controls></video>
+  </div>
+
+  <script>
+    const videoInput = document.getElementById("videoInput");
+    const videoPreview = document.getElementById("videoPreview");
+    const canvas = document.getElementById("drawCanvas");
+    const ctx = canvas.getContext("2d");
+    const sendBtn = document.getElementById("sendBtn");
+    const outputVideo = document.getElementById("outputVideo");
+
+    let mainBBox = null;          // [x, y, w, h]
+    let otherBBoxes = [];         // [[x,y,w,h], ...]
+    let drawing = false;
+    let startX = 0, startY = 0;
+    let currentRect = null;
+    let currentFile = null;
+
+    // 1) When user selects a video
+    videoInput.addEventListener("change", () => {
+      const file = videoInput.files[0];
+      if (!file) return;
+
+      currentFile = file;
+      const url = URL.createObjectURL(file);
+      videoPreview.src = url;
+
+      // reset bboxes
+      mainBBox = null;
+      otherBBoxes = [];
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      sendBtn.disabled = true;
+    });
+
+    // 2) When video metadata is loaded, size canvas to match video
+    videoPreview.addEventListener("loadedmetadata", () => {
+      const vw = videoPreview.videoWidth;
+      const vh = videoPreview.videoHeight;
+
+      if (!vw || !vh) return;
+
+      // Set canvas to same resolution as video
+      canvas.width = vw;
+      canvas.height = vh;
+
+      // Match CSS size
+      videoPreview.width = vw;
+      videoPreview.height = vh;
+      canvas.style.width = videoPreview.clientWidth + "px";
+      canvas.style.height = videoPreview.clientHeight + "px";
+    });
+
+    // Helper: translate mouse coords to canvas coords
+    function getCanvasCoords(ev) {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      return {
+        x: (ev.clientX - rect.left) * scaleX,
+        y: (ev.clientY - rect.top) * scaleY
+      };
+    }
+
+    // 3) Drawing logic
+    canvas.addEventListener("mousedown", (ev) => {
+      if (!currentFile) return;
+      drawing = true;
+      canvas.classList.add("drawing");
+      const pos = getCanvasCoords(ev);
+      startX = pos.x;
+      startY = pos.y;
+      currentRect = null;
+    });
+
+    canvas.addEventListener("mousemove", (ev) => {
+      if (!drawing) return;
+      const pos = getCanvasCoords(ev);
+      const w = pos.x - startX;
+      const h = pos.y - startY;
+      currentRect = [startX, startY, w, h];
+
+      // redraw
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // draw existing boxes
+      if (mainBBox) {
+        ctx.strokeStyle = "red";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(mainBBox[0], mainBBox[1], mainBBox[2], mainBBox[3]);
+      }
+      ctx.strokeStyle = "lime";
+      otherBBoxes.forEach(b => {
+        ctx.strokeRect(b[0], b[1], b[2], b[3]);
+      });
+
+      // draw current
+      if (currentRect) {
+        ctx.strokeStyle = mainBBox ? "lime" : "red"; // first is main
+        ctx.strokeRect(currentRect[0], currentRect[1], currentRect[2], currentRect[3]);
+      }
+    });
+
+    canvas.addEventListener("mouseup", () => {
+      if (!drawing || !currentRect) {
+        drawing = false;
+        canvas.classList.remove("drawing");
+        return;
+      }
+      drawing = false;
+      canvas.classList.remove("drawing");
+
+      // normalize to x,y,w,h positive width/height
+      let [x, y, w, h] = currentRect;
+      if (w < 0) { x += w; w = -w; }
+      if (h < 0) { y += h; h = -h; }
+
+      // minimal size
+      if (w < 5 || h < 5) return;
+
+      if (!mainBBox) {
+        mainBBox = [Math.round(x), Math.round(y), Math.round(w), Math.round(h)];
+      } else {
+        otherBBoxes.push([Math.round(x), Math.round(y), Math.round(w), Math.round(h)]);
+      }
+
+      // redraw final
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (mainBBox) {
+        ctx.strokeStyle = "red";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(mainBBox[0], mainBBox[1], mainBBox[2], mainBBox[3]);
+      }
+      ctx.strokeStyle = "lime";
+      otherBBoxes.forEach(b => ctx.strokeRect(b[0], b[1], b[2], b[3]));
+
+      if (mainBBox) sendBtn.disabled = false;
+    });
+
+    // 4) Send to Flask API
+    sendBtn.addEventListener("click", async () => {
+  if (!currentFile || !mainBBox) {
+    alert("Select video and draw at least one box (main player).");
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append("video", currentFile);
+  formData.append(
+    "bboxes",
+    JSON.stringify({
+      main_bbox: mainBBox,
+      other_bboxes: otherBBoxes,
+    })
+  );
+
+  sendBtn.disabled = true;
+  sendBtn.textContent = "Processing...";
+
+  try {
+    const res = await fetch("http://127.0.0.1:8000/process-video", {
+      method: "POST",
+      body: formData,
+    });
+
+    console.log("Status:", res.status);
+    console.log("Content-Type:", res.headers.get("Content-Type"));
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      console.error("Server error body:", err);
+      alert("Server error: " + (err.error || res.statusText));
+    } else {
+      const blob = await res.blob();
+      console.log("Blob size:", blob.size);
+
+      if (blob.size === 0) {
+        alert("Received empty video from server.");
+        return;
+      }
+
+      const url = URL.createObjectURL(blob);
+      outputVideo.src = url;
+      outputVideo.load();
+      outputVideo.play().catch((e) => {
+        console.error("Play error:", e);
+      });
+    }
+  } catch (e) {
+    console.error(e);
+    alert("Request failed: " + e.message);
+  } finally {
+    sendBtn.disabled = false;
+    sendBtn.textContent = "Process Video";
+  }
+});
+
+  </script>
+</body>
+</html>
