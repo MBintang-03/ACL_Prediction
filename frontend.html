@@ -229,6 +229,44 @@
       if (mainBBox) sendBtn.disabled = false;
     });
 
+  canvas.addEventListener("touchend", (ev) => {
+  if (!drawing || !currentRect) {
+    drawing = false;
+    canvas.classList.remove("drawing");
+    return;
+  }
+  ev.preventDefault();
+  
+  drawing = false;
+  canvas.classList.remove("drawing");
+
+  // Normalize (same logic as mouse)
+  let [x, y, w, h] = currentRect;
+  if (w < 0) { x += w; w = -w; }
+  if (h < 0) { y += h; h = -h; }
+
+  if (w < 5 || h < 5) return;
+
+  if (!mainBBox) {
+    mainBBox = [Math.round(x), Math.round(y), Math.round(w), Math.round(h)];
+  } else {
+    otherBBoxes.push([Math.round(x), Math.round(y), Math.round(w), Math.round(h)]);
+  }
+
+  // Redraw final
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (mainBBox) {
+    ctx.strokeStyle = "red";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(mainBBox[0], mainBBox[1], mainBBox[2], mainBBox[3]);
+  }
+  ctx.strokeStyle = "lime";
+  otherBBoxes.forEach(b => ctx.strokeRect(b[0], b[1], b[2], b[3]));
+
+  if (mainBBox) sendBtn.disabled = false;
+});
+
+
     // 4) Send to backend API
     sendBtn.addEventListener("click", async () => {
       if (!currentFile || !mainBBox) {
@@ -299,5 +337,6 @@
   </script>
 </body>
 </html>
+
 
 
