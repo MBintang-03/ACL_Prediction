@@ -12,6 +12,15 @@ from Code_deploy import process_video
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
+@app.route("/", methods=["GET"])
+def health_check():
+    """Health check endpoint"""
+    return jsonify({
+        "status": "healthy",
+        "service": "Soccer Tracker API",
+        "version": "1.0.0"
+    }), 200
+
 
 @app.route("/process-video", methods=["POST"])
 def process_video_route():
