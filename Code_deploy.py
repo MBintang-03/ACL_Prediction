@@ -12,21 +12,48 @@ import json  # kept in case you use it elsewhere
 # ---------------------------------------------------------
 # Helper: CSRT tracker creation that works on different builds
 # ---------------------------------------------------------
-def create_csrt_tracker():
+def create_tracker():
     """
-    Create a CSRT tracker in a way that works across different OpenCV builds.
+    Try to create the best available OpenCV tracker.
+    Preference: CSRT -> KCF -> MOSSE -> MIL.
+    Works with both new (cv2.TrackerX_create) and legacy (cv2.legacy.TrackerX_create) APIs.
     """
-    # Old-style API
+    # --- CSRT ---
     if hasattr(cv2, "TrackerCSRT_create"):
+        print("[Tracker] Using TrackerCSRT")
         return cv2.TrackerCSRT_create()
-
-    # Newer API: tracker in cv2.legacy
     if hasattr(cv2, "legacy") and hasattr(cv2.legacy, "TrackerCSRT_create"):
+        print("[Tracker] Using legacy.TrackerCSRT")
         return cv2.legacy.TrackerCSRT_create()
 
-    # If neither exists, then CSRT is not compiled in this OpenCV build
-    raise RuntimeError("OpenCV was built without CSRT tracker (TrackerCSRT_create).")
+    # --- KCF ---
+    if hasattr(cv2, "TrackerKCF_create"):
+        print("[Tracker] Using TrackerKCF")
+        return cv2.TrackerKCF_create()
+    if hasattr(cv2, "legacy") and hasattr(cv2.legacy, "TrackerKCF_create"):
+        print("[Tracker] Using legacy.TrackerKCF")
+        return cv2.legacy.TrackerKCF_create()
 
+    # --- MOSSE ---
+    if hasattr(cv2, "TrackerMOSSE_create"):
+        print("[Tracker] Using TrackerMOSSE")
+        return cv2.TrackerMOSSE_create()
+    if hasattr(cv2, "legacy") and hasattr(cv2.legacy, "TrackerMOSSE_create"):
+        print("[Tracker] Using legacy.TrackerMOSSE")
+        return cv2.legacy.TrackerMOSSE_create()
+
+    # --- MIL as last fallback ---
+    if hasattr(cv2, "TrackerMIL_create"):
+        print("[Tracker] Using TrackerMIL")
+        return cv2.TrackerMIL_create()
+    if hasattr(cv2, "legacy") and hasattr(cv2.legacy, "TrackerMIL_create"):
+        print("[Tracker] Using legacy.TrackerMIL")
+        return cv2.legacy.TrackerMIL_create()
+
+    # If we get here, this OpenCV build has no usable tracker
+    raise RuntimeError(
+        "No supported OpenCV tracker (CSRT/KCF/MOSSE/MIL) found in this build."
+    )
 
 # ---------------------------------------------------------
 # Kalman Filter
@@ -259,7 +286,7 @@ class PlayerTracker:
     def __init__(self, collision_th: float):
         self.tracked_player = None
         self.tracking_initialized = False
-        self.tracker = create_csrt_tracker()
+        self.tracker = create_tracker()
         self.kalman = KalmanFilter()
         self.movement_analyzer = MovementAnalyzer(collision_th)
         self.frames_since_detection = 0
@@ -272,7 +299,7 @@ class PlayerTracker:
 
     def init_tracking(self, frame: np.ndarray, bbox: Tuple[int, int, int, int]) -> None:
         # Always use helper to support different OpenCV builds
-        self.tracker = create_csrt_tracker()
+        self.tracker = create_tracker()
         self.tracker.init(frame, bbox)
         self.kalman.init(bbox)
         self.tracking_initialized = True
