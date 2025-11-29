@@ -209,7 +209,7 @@ class PlayerTracker:
     def __init__(self, collision_th: float):
         self.tracked_player = None
         self.tracking_initialized = False
-        self.tracker = cv2.TrackerCSRT_create()
+        self.tracker = create_csrt_tracker()
         self.kalman = KalmanFilter()
         self.movement_analyzer = MovementAnalyzer(collision_th)
         self.frames_since_detection = 0
