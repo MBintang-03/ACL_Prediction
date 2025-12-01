@@ -4,24 +4,33 @@
   <meta charset="UTF-8" />
   <title>Football Player Tracking</title>
   <style>
-     body {
+    * {
+      box-sizing: border-box;
+    }
+    body {
       font-family: Arial, sans-serif;
       margin: 20px;
-      background-image: url('images-2.jpeg');
+      background: #ffff;
+      background-attachment: fixed;
+      min-height: 100vh;
     }
     .front-page {
-      background: rgba(255, 255, 255, 0.8);
-      min-height: 50vh;
+      background-image: linear-gradient(rgba(128, 128, 128, 0.85), rgba(128, 128, 128, 0.85)), url('images-2.jpg');
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      min-height: 100vh;
       padding: 20px;
-      border-radius: 8px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
       display: flex;
       flex-direction: column;
       align-items: center;
+      position: relative;
+      height: 100vh !important;
+      overflow-y: auto;
     }
 
     h1 {
-      color: #333;
+      color: #000000;
       margin-bottom: 20px;
     }
 
@@ -81,9 +90,9 @@
     }
 
     .instructions {
-      background: #e3f2fd;
-      padding: 15px;
-      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.5);
+      padding: 10px;
+      border-radius: 25px;
       margin: 10px 0;
       text-align: center;
       max-width: 500px;
@@ -100,6 +109,7 @@
       box-shadow: 0 2px 8px rgba(0,0,0,0.2);
       border-radius: 4px;
       overflow: hidden;
+      max-height: 30vh !important;
     }
 
     #videoPreview {
@@ -128,10 +138,11 @@
       width: 100%;
       max-width: 640px;
       margin-top: 30px;
+      height: auto;
     }
 
     .output-section h2 {
-      color: #333;
+      color: #000000;
       margin-bottom: 15px;
     }
 
@@ -142,6 +153,7 @@
       background: #000;
       border-radius: 4px;
       box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      max-height: 30vh !important;
     }
 
     .status {
@@ -179,7 +191,7 @@
       <div class="instructions">
         <p>
           <b>Please draw rectangle in the frame to choose which Player</b> = Main Player (red)<br>
-          <b>Draw next rectangle if you want to select another player</b> = Other Players (green)<br>
+          <b>Draw next rectangle if you want to select another player</b> = Other Players (green)<br><br>
           <b>Please click process video to processing the analysis and click reset to reset the boundary box (Rectangle)</b>
         </p>
       </div>
@@ -431,16 +443,3 @@
   </script>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
-
